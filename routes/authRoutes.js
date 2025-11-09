@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 import path from "path";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import Driver from "../models/Driver.js";
 import User from "../models/User.js";
@@ -163,3 +163,4 @@ router.post("/login", async (req, res) => {
 });
 
 export default router;
+
