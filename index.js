@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 import http from "http";
 import { Server } from "socket.io";
 
-// ✅ Import all route files
+// ✅ Import Routes
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import branchRoutes from "./routes/branchRoutes.js";
@@ -18,8 +18,6 @@ import managerRoutes from "./routes/managerRoutes.js";
 import managerTripsheetRoutes from "./routes/managerTripsheetRoutes.js";
 import salarySchemeRoutes from "./routes/salarySchemeRoutes.js";
 import assignSalaryRoutes from "./routes/assignSalaryRoutes.js";
-
-// ✅ NEW: Vehicle Routes
 import vehicleRoutes from "./routes/vehicleRoutes.js";
 
 dotenv.config();
@@ -27,19 +25,19 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
-// ✅ Initialize Socket.io
+// ✅ Socket Setup for Production (Allows All Origins)
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: "*",
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   },
 });
 
-// ✅ Middleware setup
-app.use(cors());
+// ✅ Middleware
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 
-// ✅ Setup file upload folder (static access)
+// ✅ Static Upload Folder
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -55,13 +53,11 @@ app.use("/api/manager", managerRoutes);
 app.use("/api/manager", managerTripsheetRoutes);
 app.use("/api/salary-schemes", salarySchemeRoutes);
 app.use("/api/driver-salary", assignSalaryRoutes);
-
-// ✅ NEW: Vehicle Route
 app.use("/api/vehicles", vehicleRoutes);
 
-// ✅ API Test Endpoint
+// ✅ Base Route
 app.get("/", (req, res) => {
-  res.send("🚀 Backend API is running successfully!");
+  res.send("✅ Backend API is Live and Running!");
 });
 
 // ✅ MongoDB Connection
@@ -70,14 +66,15 @@ mongoose
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
-  .then(() => console.log("✅ MongoDB connected successfully"))
-  .catch((err) => console.error("❌ MongoDB connection error:", err));
+  .then(() => console.log("✅ MongoDB Connected Successfully"))
+  .catch((err) => console.error("❌ MongoDB Connection Error:", err));
 
-// ✅ Socket.io Events
+// ✅ Attach socket to app instance
 app.set("io", io);
 
+// ✅ Socket Events
 io.on("connection", (socket) => {
-  console.log("⚡ User connected:", socket.id);
+  console.log("⚡ User Connected:", socket.id);
 
   socket.on("updateLocation", (data) => {
     io.emit("driverLocationUpdate", data);
@@ -99,10 +96,10 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("❌ User disconnected:", socket.id);
+    console.log("❌ User Disconnected:", socket.id);
   });
 });
 
-// ✅ Server start
+// ✅ Start Server
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`🌐 Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`🌍 Server Running on Port ${PORT}`));
