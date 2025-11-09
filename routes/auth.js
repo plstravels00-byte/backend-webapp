@@ -1,5 +1,5 @@
 import express from "express";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Driver from "../models/Driver.js";
@@ -67,3 +67,4 @@ router.post("/login", async (req, res) => {
 });
 
 export default router;
+
