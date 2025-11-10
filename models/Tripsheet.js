@@ -1,42 +1,34 @@
 import mongoose from "mongoose";
 
+const locationSchema = new mongoose.Schema({
+  lat: Number,
+  lng: Number,
+  address: String
+}, { _id: false });
+
 const tripSheetSchema = new mongoose.Schema(
   {
-    driverId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Driver",
-      required: true,
-    },
-    branchId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Branch",
-      required: true,
-    },
+    driverId: { type: mongoose.Schema.Types.ObjectId, ref: "Driver", required: true },
+    vehicleId: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle", required: true },
+    branchId: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", required: true },
 
-    // ✅ Add this field (this is what was missing)
-    vehicleId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Vehicle",
-      required: true,
-    },
+    vehicleNumber: String,
 
-    startKm: { type: Number, required: true },
-    startCng: { type: Number, required: true },
+    startKM: Number,
+    endKM: Number,
 
-    endKm: { type: Number, default: null },
-    endCng: { type: Number, default: null },
+    startCNG: Number,
+    endCNG: Number,
 
-    startTime: { type: Date, default: Date.now },
-    endTime: { type: Date, default: null },
+    startTime: Date,
+    endTime: Date,
 
-    status: {
-      type: String,
-      enum: ["ongoing", "completed"],
-      default: "ongoing",
-    },
+    startLoc: locationSchema,
+    endLoc: locationSchema,
+
+    status: { type: String, enum: ["active", "completed"], default: "active" }
   },
   { timestamps: true }
 );
 
-// ✅ Keep correct collection name
-export default mongoose.model("Trip", tripSheetSchema, "tripsheet");
+export default mongoose.model("TripSheet", tripSheetSchema);
