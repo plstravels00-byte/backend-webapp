@@ -1,26 +1,38 @@
-// controllers/managerTripsheetController.js
-import TripSheet from "../models/Tripsheet.js"; // ✅ using your existing model name
+import TripSheet from "../models/tripSheet.js";
 
-export const getManagerTripsheet = async (req, res) => {
-  try {
-    const { branchId } = req.params;
+export const startDuty = async (req, res) => {
+  const driverId = req.user.id;
+  const { vehicleId, vehicleNumber, startKM, startCNG, lat, lng, address } = req.body;
 
-    if (!branchId) {
-      return res.status(400).json({ message: "Branch ID is required" });
-    }
+  const active = await TripSheet.findOne({ driverId, status: "active" });
+  if (active) return res.status(400).json({ message: "Already on duty" });
 
-    // ✅ Find completed trips for that branch
-    const trips = await TripSheet.find({ branchId, status: "completed" })
-      .populate("driverId", "name mobile email")
-      .sort({ updatedAt: -1 });
+  const trip = await TripSheet.create({
+    driverId,
+    vehicleId,
+    vehicleNumber,
+    startKM,
+    startCNG,
+    startTime: new Date(),
+    startLoc: { lat, lng, address }
+  });
 
-    if (!trips || trips.length === 0) {
-      return res.status(200).json({ message: "No completed trips found" });
-    }
+  res.json({ success: true, trip });
+};
 
-    res.status(200).json(trips);
-  } catch (error) {
-    console.error("Error fetching trips:", error);
-    res.status(500).json({ message: "Server error fetching trips" });
-  }
+export const endDuty = async (req, res) => {
+  const driverId = req.user.id;
+  const { endKM, endCNG, lat, lng, address } = req.body;
+
+  const trip = await TripSheet.findOne({ driverId, status: "active" });
+  if (!trip) return res.status(404).json({ message: "No active duty" });
+
+  trip.endKM = endKM;
+  trip.endCNG = endCNG;
+  trip.endTime = new Date();
+  trip.endLoc = { lat, lng, address };
+  trip.status = "completed";
+
+  await trip.save();
+  res.json({ success: true, trip });
 };
