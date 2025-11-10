@@ -5,8 +5,7 @@ import Driver from "../models/Driver.js";
 const router = express.Router();
 
 /**
- * ✅ START DUTY
- * POST /api/driver-duty/start
+ * START DUTY
  */
 router.post("/start", async (req, res) => {
   try {
@@ -20,10 +19,10 @@ router.post("/start", async (req, res) => {
       driverId,
       branchId,
       vehicleId,
-      startKM: Number(startKm),   // ✅ corrected field name
-      startCNG: Number(startCng), // ✅ corrected field name
+      startKM: Number(startKm),
+      startCNG: Number(startCng),
       startTime: startTime ? new Date(startTime) : new Date(),
-      status: "active", // ✅ FIXED enum
+      status: "active", // ✅ must match schema
     });
 
     await Driver.findByIdAndUpdate(driverId, { dutyStatus: true });
@@ -36,25 +35,21 @@ router.post("/start", async (req, res) => {
 });
 
 /**
- * ✅ END DUTY
- * PUT /api/driver-duty/end/:tripId
+ * END DUTY
  */
 router.put("/end/:tripId", async (req, res) => {
   try {
     const { tripId } = req.params;
     const { endKm, endCng, endTime } = req.body;
 
-    if (endKm == null || endCng == null) {
-      return res.status(400).json({ message: "Missing end Km or end CNG" });
-    }
-
     const trip = await Trip.findById(tripId);
     if (!trip) return res.status(404).json({ message: "Trip not found" });
 
-    trip.endKM = Number(endKm);   // ✅ corrected
-    trip.endCNG = Number(endCng); // ✅ corrected
+    trip.endKM = Number(endKm);
+    trip.endCNG = Number(endCng);
     trip.endTime = endTime ? new Date(endTime) : new Date();
     trip.status = "completed"; // ✅ matches schema
+
     await trip.save();
 
     await Driver.findByIdAndUpdate(trip.driverId, { dutyStatus: false });
@@ -71,7 +66,29 @@ router.put("/end/:tripId", async (req, res) => {
 });
 
 /**
- * ✅ GET COMPLETED TRIPS (Manager View)
+ * GET ACTIVE TRIP (Driver Dashboard)
+ */
+router.get("/active/:driverId", async (req, res) => {
+  try {
+    const { driverId } = req.params;
+
+    const activeTrip = await Trip.findOne({
+      driverId,
+      status: "active", // ✅ must match schema
+      vehicleId: { $exists: true, $ne: null },
+    })
+      .populate("vehicleId", "vehicleNumber rcBookUrl insuranceUrl permitUrl fitnessUrl")
+      .populate("driverId", "name mobile");
+
+    return res.json(activeTrip || null);
+  } catch (err) {
+    console.error("Active Duty Check Error:", err.message);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
+/**
+ * GET COMPLETED TRIPS (Manager View)
  */
 router.get("/tripsheets/:branchId", async (req, res) => {
   try {
@@ -90,28 +107,6 @@ router.get("/tripsheets/:branchId", async (req, res) => {
   } catch (err) {
     console.error("Get tripsheets error:", err.message);
     res.status(500).json({ message: "Server error" });
-  }
-});
-
-/**
- * ✅ GET ACTIVE TRIP (Driver Dashboard)
- */
-router.get("/active/:driverId", async (req, res) => {
-  try {
-    const { driverId } = req.params;
-
-    const activeTrip = await Trip.findOne({
-      driverId,
-      status: "active", // ✅ FIXED MATCH
-      vehicleId: { $exists: true, $ne: null },
-    })
-      .populate("vehicleId", "vehicleNumber rcBookUrl insuranceUrl permitUrl fitnessUrl")
-      .populate("driverId", "name mobile");
-
-    return res.json(activeTrip || null);
-  } catch (err) {
-    console.error("Active Duty Check Error:", err.message);
-    return res.status(500).json({ message: "Server error" });
   }
 });
 
