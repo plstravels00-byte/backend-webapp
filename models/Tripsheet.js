@@ -1,34 +1,68 @@
-import mongoose from "mongoose";
+/**
+ * START DUTY
+ */
+router.post("/start", async (req, res) => {
+  try {
+    const { driverId, branchId, vehicleId, startKm, startCng, startTime } = req.body;
 
-const locationSchema = new mongoose.Schema({
-  lat: Number,
-  lng: Number,
-  address: String
-}, { _id: false });
+    const trip = await Trip.create({
+      driverId,
+      branchId,
+      vehicleId,
+      startKM: startKm,
+      startCNG: startCng,
+      startTime: startTime ? new Date(startTime) : new Date(),
+      status: "active", // ✅ corrected
+    });
 
-const tripSheetSchema = new mongoose.Schema(
-  {
-    driverId: { type: mongoose.Schema.Types.ObjectId, ref: "Driver", required: true },
-    vehicleId: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle", required: true },
-    branchId: { type: mongoose.Schema.Types.ObjectId, ref: "Branch", required: true },
+    await Driver.findByIdAndUpdate(driverId, { dutyStatus: true });
 
-    vehicleNumber: String,
+    return res.json(trip);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
 
-    startKM: Number,
-    endKM: Number,
+/**
+ * END DUTY
+ */
+router.put("/end/:tripId", async (req, res) => {
+  try {
+    const { tripId } = req.params;
+    const { endKm, endCng, endTime } = req.body;
 
-    startCNG: Number,
-    endCNG: Number,
+    const trip = await Trip.findById(tripId);
+    if (!trip) return res.status(404).json({ message: "Trip not found" });
 
-    startTime: Date,
-    endTime: Date,
+    trip.endKM = Number(endKm);
+    trip.endCNG = Number(endCng);
+    trip.endTime = endTime ? new Date(endTime) : new Date();
+    trip.status = "completed"; // ✅ correct
 
-    startLoc: locationSchema,
-    endLoc: locationSchema,
+    await trip.save();
 
-    status: { type: String, enum: ["active", "completed"], default: "active" }
-  },
-  { timestamps: true }
-);
+    await Driver.findByIdAndUpdate(trip.driverId, { dutyStatus: false });
 
-export default mongoose.model("TripSheet", tripSheetSchema);
+    return res.json(trip);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+/**
+ * GET ACTIVE TRIP
+ */
+router.get("/active/:driverId", async (req, res) => {
+  try {
+    const { driverId } = req.params;
+
+    const activeTrip = await Trip.findOne({
+      driverId,
+      status: "active", // ✅ corrected
+    });
+
+    return res.json(activeTrip || null);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
