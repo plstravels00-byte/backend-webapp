@@ -1,38 +1,29 @@
-import TripSheet from "../models/tripSheet.js";
+import TripSheet from "../models/Tripsheet.js";
+import mongoose from "mongoose";
 
-export const startDuty = async (req, res) => {
-  const driverId = req.user.id;
-  const { vehicleId, vehicleNumber, startKM, startCNG, lat, lng, address } = req.body;
+// ✅ Manager / Admin view completed duty trip sheets
+export const getCompletedTripsByBranch = async (req, res) => {
+  try {
+    const { branchId } = req.params;
 
-  const active = await TripSheet.findOne({ driverId, status: "active" });
-  if (active) return res.status(400).json({ message: "Already on duty" });
+    // Handle ObjectId or string
+    const query = mongoose.isValidObjectId(branchId)
+      ? { branchId: new mongoose.Types.ObjectId(branchId), status: "completed" }
+      : { branchId, status: "completed" };
 
-  const trip = await TripSheet.create({
-    driverId,
-    vehicleId,
-    vehicleNumber,
-    startKM,
-    startCNG,
-    startTime: new Date(),
-    startLoc: { lat, lng, address }
-  });
+    const trips = await TripSheet.find(query)
+      .populate("driverId", "name mobile")
+      .populate("vehicleId", "vehicleNumber model")
+      .sort({ updatedAt: -1 });
 
-  res.json({ success: true, trip });
-};
+    if (!trips.length) {
+      return res.status(404).json({ message: "No completed trips found" });
+    }
 
-export const endDuty = async (req, res) => {
-  const driverId = req.user.id;
-  const { endKM, endCNG, lat, lng, address } = req.body;
+    res.json(trips);
 
-  const trip = await TripSheet.findOne({ driverId, status: "active" });
-  if (!trip) return res.status(404).json({ message: "No active duty" });
-
-  trip.endKM = endKM;
-  trip.endCNG = endCNG;
-  trip.endTime = new Date();
-  trip.endLoc = { lat, lng, address };
-  trip.status = "completed";
-
-  await trip.save();
-  res.json({ success: true, trip });
+  } catch (err) {
+    console.error("❌ Error in getCompletedTripsByBranch:", err);
+    res.status(500).json({ message: "Server error" });
+  }
 };
