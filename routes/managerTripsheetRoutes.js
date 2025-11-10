@@ -1,9 +1,9 @@
 import express from "express";
 import mongoose from "mongoose";
-import Trip from "../models/Tripsheet.js";
 import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
+const Trip = mongoose.model("TripSheet"); // ✅ Use registered model
 
 router.get(
   "/tripsheet/:branchId",
@@ -14,13 +14,13 @@ router.get(
       const { branchId } = req.params;
       console.log("📡 Fetching completed trips for branch:", branchId);
 
-      // handle both ObjectId and string stored IDs
       const query = mongoose.isValidObjectId(branchId)
         ? { branchId: new mongoose.Types.ObjectId(branchId), status: "completed" }
         : { branchId, status: "completed" };
 
       const trips = await Trip.find(query)
         .populate("driverId", "name mobile email")
+        .populate("vehicleId", "vehicleNumber") // ✅ show vehicle number
         .sort({ updatedAt: -1 });
 
       console.log("✅ Trips fetched:", trips.length);
