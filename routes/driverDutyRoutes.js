@@ -20,18 +20,13 @@ router.post("/start", async (req, res) => {
       driverId,
       branchId,
       vehicleId,
-      startKm,
-      startCng,
+      startKM: Number(startKm),   // ✅ corrected field name
+      startCNG: Number(startCng), // ✅ corrected field name
       startTime: startTime ? new Date(startTime) : new Date(),
-      status: "ongoing",
+      status: "active", // ✅ FIXED enum
     });
 
     await Driver.findByIdAndUpdate(driverId, { dutyStatus: true });
-
-    const io = req.app.get("io");
-    if (io && branchId) {
-      io.to(String(branchId)).emit("driverOnDuty", { driverId, trip });
-    }
 
     return res.json(trip);
   } catch (err) {
@@ -56,20 +51,14 @@ router.put("/end/:tripId", async (req, res) => {
     const trip = await Trip.findById(tripId);
     if (!trip) return res.status(404).json({ message: "Trip not found" });
 
-    trip.endKm = Number(endKm);
-    trip.endCng = Number(endCng);
+    trip.endKM = Number(endKm);   // ✅ corrected
+    trip.endCNG = Number(endCng); // ✅ corrected
     trip.endTime = endTime ? new Date(endTime) : new Date();
-    trip.status = "completed";
+    trip.status = "completed"; // ✅ matches schema
     await trip.save();
 
     await Driver.findByIdAndUpdate(trip.driverId, { dutyStatus: false });
 
-    const io = req.app.get("io");
-    if (io && trip.branchId) {
-      io.to(String(trip.branchId)).emit("tripCompleted", trip);
-    }
-
-    // ✅ Return populated trip data
     const updatedTrip = await Trip.findById(tripId)
       .populate("vehicleId", "vehicleNumber")
       .populate("driverId", "name mobile");
@@ -91,7 +80,7 @@ router.get("/tripsheets/:branchId", async (req, res) => {
     const trips = await Trip.find({
       branchId,
       status: "completed",
-      vehicleId: { $exists: true, $ne: null }, // ✅ ignore old invalid records
+      vehicleId: { $exists: true, $ne: null },
     })
       .populate("driverId", "name mobile")
       .populate("vehicleId", "vehicleNumber")
@@ -105,7 +94,7 @@ router.get("/tripsheets/:branchId", async (req, res) => {
 });
 
 /**
- * ✅ GET ACTIVE TRIP (Driver App Dashboard)
+ * ✅ GET ACTIVE TRIP (Driver Dashboard)
  */
 router.get("/active/:driverId", async (req, res) => {
   try {
@@ -113,8 +102,8 @@ router.get("/active/:driverId", async (req, res) => {
 
     const activeTrip = await Trip.findOne({
       driverId,
-      status: "ongoing",
-      vehicleId: { $exists: true, $ne: null }, // ✅ skip old broken trips
+      status: "active", // ✅ FIXED MATCH
+      vehicleId: { $exists: true, $ne: null },
     })
       .populate("vehicleId", "vehicleNumber rcBookUrl insuranceUrl permitUrl fitnessUrl")
       .populate("driverId", "name mobile");
