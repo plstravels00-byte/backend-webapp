@@ -66,3 +66,4 @@ router.get("/active/:driverId", async (req, res) => {
     return res.status(500).json({ message: err.message });
   }
 });
+
