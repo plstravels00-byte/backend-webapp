@@ -17,15 +17,23 @@ const driverDutySchema = new mongoose.Schema(
       ref: "Vehicle",
       required: true,
     },
-    startKm: { type: Number, required: true },
-    startCng: { type: Number, required: true },
-    endKm: { type: Number, default: null },
-    endCng: { type: Number, default: null },
+
+    startKM: { type: Number, required: true },
+    endKM: { type: Number, default: null },
+
+    startCNG: { type: Number, required: true },
+    endCNG: { type: Number, default: null },
+
     startTime: { type: Date, default: Date.now },
     endTime: { type: Date, default: null },
-    status: { type: String, enum: ["onDuty", "completed"], default: "onDuty" },
+
+    status: {
+      type: String,
+      enum: ["active", "completed"],
+      default: "active",
+    },
   },
   { timestamps: true }
 );
 
-export default mongoose.model("DriverDuty", driverDutySchema);
+export default mongoose.model("TripSheet", driverDutySchema);
