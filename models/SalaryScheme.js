@@ -1,23 +1,39 @@
-// server/models/SalaryScheme.js
 import mongoose from "mongoose";
 
-const SalarySchemeSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true },
-    frequency: {
-      type: String,
-      enum: ["daily", "weekly", "monthly", "12hr", "rental"],
-      required: true,
-    },
-    target: { type: Number },
-    incentiveBelow: { type: Number, default: 30 },
-    incentiveAbove: { type: Number, default: 60 },
-    operatorCommissionPercent: { type: Number, default: 10 },
-    cngAllowancePercent: { type: Number, default: 30 },
-    extraRule: { type: String },
-    notes: { type: String },
-  },
-  { timestamps: true }
-);
+const salarySchemeSchema = new mongoose.Schema({
+  name: String,
+  tripSheetType: String,
+  payBasis: String,
 
-export default mongoose.model("SalaryScheme", SalarySchemeSchema);
+  target: Number,
+  basicSalary: Number,
+  rentalPerDay: Number,
+
+  incentiveBelow: Number,
+  incentiveAbove: Number,
+  operatorCommissionPercent: Number,
+  cngAllowancePercent: Number,
+
+  notes: String,
+
+  targetPeriodUnit: String,
+  cycleType: String,
+
+  monthAnchorDay: Number,
+  monthAnchorTime: String,
+
+  weekAnchorDow: String,
+  weekAnchorTime: String,
+
+  customDaysLength: Number,
+
+  rentalDayStartTime: String,
+  rentalDayEndTime: String,
+
+  carryForwardTarget: Boolean,
+
+  // ✅ NEW FIELD
+  customCalcHtml: { type: String, default: "" }
+});
+
+export default mongoose.model("SalaryScheme", salarySchemeSchema);
