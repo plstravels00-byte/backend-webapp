@@ -29,6 +29,13 @@ const io = new Server(server, { cors: { origin: "*" } });
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
+// ✅ FIX — Mobile PDF Viewer “Failed to load” Issue
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  next();
+});
+
 // Static Upload Directory
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,10 +53,13 @@ app.use("/api/salary-schemes", salarySchemeRoutes);
 app.use("/api/driver-salary", assignSalaryRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 
-app.get("/", (req, res) => res.send("✅ Backend Live"));
+app.get("/", (req, res) => res.send("✅ Backend is Live"));
 
-// Database
-mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Mongo Connected"));
+// DB Connection
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch((err) => console.log("❌ MongoDB Error:", err));
 
 // Socket
 io.on("connection", (socket) => {
