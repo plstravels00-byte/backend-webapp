@@ -1,84 +1,61 @@
 import express from "express";
-import Trip from "../models/Tripsheet.js";
-import Driver from "../models/Driver.js";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+import http from "http";
+import { Server } from "socket.io";
 
-const router = express.Router();
+// Routes
+import authRoutes from "./routes/authRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+import branchRoutes from "./routes/branchRoutes.js";
+import driverRoutes from "./routes/driverRoutes.js";
+import driverDutyRoutes from "./routes/driverDutyRoutes.js";
+import managerRoutes from "./routes/ManagerRoutes.js";
+import managerTripsheetRoutes from "./routes/managerTripsheetRoutes.js";
+import salarySchemeRoutes from "./routes/salarySchemeRoutes.js";
+import assignSalaryRoutes from "./routes/assignSalaryRoutes.js";
+import vehicleRoutes from "./routes/vehicleRoutes.js";
 
-/**
- * START DUTY
- */
-router.post("/start", async (req, res) => {
-  try {
-    const { driverId, branchId, vehicleId, startKm, startCng } = req.body;
+dotenv.config();
+const app = express();
+const server = http.createServer(app);
 
-    if (!driverId || !branchId || !vehicleId || startKm == null || startCng == null) {
-      return res.status(400).json({ message: "Required fields missing" });
-    }
+const io = new Server(server, { cors: { origin: "*" } });
 
-    const trip = await Trip.create({
-      driverId,
-      branchId,
-      vehicleId,
-      startKM: Number(startKm),
-      startCNG: Number(startCng),
-      status: "active"
-    });
+// Middleware
+app.use(cors({ origin: "*" }));
+app.use(express.json());
 
-    await Driver.findByIdAndUpdate(driverId, { dutyStatus: true });
+// Static Upload Directory
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-    return res.json(trip);
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/branches", branchRoutes);
+app.use("/api/drivers", driverRoutes);
+app.use("/api/driver-duty", driverDutyRoutes);
+app.use("/api/manager", managerRoutes);
+app.use("/api/manager", managerTripsheetRoutes);
+app.use("/api/salary-schemes", salarySchemeRoutes);
+app.use("/api/driver-salary", assignSalaryRoutes);
+app.use("/api/vehicles", vehicleRoutes);
 
-  } catch (err) {
-    console.error("Start Duty Error:", err);
-    return res.status(500).json({ message: err.message });
-  }
+app.get("/", (req, res) => res.send("✅ Backend Live"));
+
+// Database
+mongoose.connect(process.env.MONGO_URI).then(() => console.log("✅ Mongo Connected"));
+
+// Socket
+io.on("connection", (socket) => {
+  console.log("⚡ Socket connected:", socket.id);
 });
 
-/**
- * END DUTY
- */
-router.put("/end/:tripId", async (req, res) => {
-  try {
-    const { tripId } = req.params;
-    const { endKm, endCng } = req.body;
-
-    const trip = await Trip.findById(tripId);
-    if (!trip) return res.status(404).json({ message: "Trip not found" });
-
-    trip.endKM = Number(endKm);
-    trip.endCNG = Number(endCng);
-    trip.endTime = new Date();
-    trip.status = "completed";
-
-    await trip.save();
-    await Driver.findByIdAndUpdate(trip.driverId, { dutyStatus: false });
-
-    return res.json(trip);
-
-  } catch (err) {
-    console.error("End Duty Error:", err);
-    return res.status(500).json({ message: err.message });
-  }
-});
-
-/**
- * GET ACTIVE TRIP
- */
-router.get("/active/:driverId", async (req, res) => {
-  try {
-    const { driverId } = req.params;
-
-    const activeTrip = await Trip.findOne({
-      driverId,
-      status: "active"
-    }).populate("vehicleId", "vehicleNumber");
-
-    return res.json(activeTrip || null);
-
-  } catch (err) {
-    console.error("Active Trip Error:", err);
-    return res.status(500).json({ message: err.message });
-  }
-});
-
-export default router; // ✅ REQUIRED
+// Start Server
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => console.log(`🌍 Server Running on port ${PORT}`));
