@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 import http from "http";
 import { Server } from "socket.io";
 
-// Routes
+// ✅ Import Routes
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import branchRoutes from "./routes/branchRoutes.js";
@@ -19,13 +19,17 @@ import salarySchemeRoutes from "./routes/salarySchemeRoutes.js";
 import assignSalaryRoutes from "./routes/assignSalaryRoutes.js";
 import vehicleRoutes from "./routes/vehicleRoutes.js";
 
+// ✅ Newly Added Route
+import walletRoutes from "./routes/walletRoutes.js";
+
 dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
+// ✅ Socket Setup
 const io = new Server(server, { cors: { origin: "*" } });
 
-// Middleware
+// ✅ Middleware
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
@@ -36,12 +40,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Static Upload Directory
+// ✅ Static Upload Directory
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Routes
+// ✅ Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/branches", branchRoutes);
@@ -53,19 +57,27 @@ app.use("/api/salary-schemes", salarySchemeRoutes);
 app.use("/api/driver-salary", assignSalaryRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 
-app.get("/", (req, res) => res.send("✅ Backend is Live"));
+// ✅ NEW: Wallet & Rewards API
+app.use("/api/wallet", walletRoutes);
 
-// DB Connection
+// ✅ Root Route
+app.get("/", (req, res) => res.send("✅ Backend is Live & Wallet API Added!"));
+
+// ✅ MongoDB Connection
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB Connected"))
-  .catch((err) => console.log("❌ MongoDB Error:", err));
+  .then(() => console.log("✅ MongoDB Connected Successfully"))
+  .catch((err) => console.log("❌ MongoDB Connection Error:", err));
 
-// Socket
+// ✅ Socket Setup
 io.on("connection", (socket) => {
   console.log("⚡ Socket connected:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("❌ Socket disconnected:", socket.id);
+  });
 });
 
-// Start Server
+// ✅ Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`🌍 Server Running on port ${PORT}`));
