@@ -1,24 +1,26 @@
 import mongoose from "mongoose";
 
-const walletSchema = new mongoose.Schema(
+const driverWalletSchema = new mongoose.Schema(
   {
     driverId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "User", // driver user model
       required: true,
     },
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Branch",
+      required: false,
     },
     amount: {
       type: Number,
       required: true,
-      default: 0,
+      min: 0,
     },
     reason: {
       type: String,
       required: true,
+      trim: true,
     },
     status: {
       type: String,
@@ -27,11 +29,11 @@ const walletSchema = new mongoose.Schema(
     },
     addedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "User", // manager
     },
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "User", // admin
     },
     approvedAt: {
       type: Date,
@@ -40,4 +42,9 @@ const walletSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model("DriverWallet", walletSchema);
+// Optional virtual for quick wallet summary
+driverWalletSchema.virtual("isApproved").get(function () {
+  return this.status === "approved";
+});
+
+export default mongoose.model("DriverWallet", driverWalletSchema);
