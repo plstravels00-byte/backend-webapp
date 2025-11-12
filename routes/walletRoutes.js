@@ -1,20 +1,72 @@
-// server/routes/walletRoutes.js
 import express from "express";
-import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
-import { createReward, listDriverWallet, listPending, approveTxn } from "../controllers/walletController.js";
+import DriverWallet from "../models/DriverWallet.js";
+import Driver from "../models/Driver.js";
 
 const router = express.Router();
 
-// Manager creates reward request for a driver (pending)
-router.post("/create", verifyToken, allowRoles("manager", "admin"), createReward);
+/**
+ * 🧾 MANAGER adds reward
+ */
+router.post("/add", async (req, res) => {
+  try {
+    const { driverId, branchId, amount, reason, addedBy } = req.body;
 
-// Driver views own wallet
-router.get("/driver/:driverId", verifyToken, allowRoles("driver", "manager", "admin"), listDriverWallet);
+    const reward = await DriverWallet.create({
+      driverId,
+      branchId,
+      amount,
+      reason,
+      addedBy,
+    });
 
-// Admin: list pending requests
-router.get("/pending", verifyToken, allowRoles("admin"), listPending);
+    res.json({ success: true, reward });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
-// Admin approve/reject
-router.post("/approve/:txnId", verifyToken, allowRoles("admin"), approveTxn);
+/**
+ * 🧾 ADMIN approves or rejects reward
+ */
+router.put("/approve/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const reward = await DriverWallet.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true }
+    );
+
+    // ✅ If approved, add amount to driver's walletBalance field
+    if (status === "approved") {
+      await Driver.findByIdAndUpdate(reward.driverId, {
+        $inc: { walletBalance: reward.amount },
+      });
+    }
+
+    res.json({ success: true, reward });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * 🧾 DRIVER - get wallet transactions + balance
+ */
+router.get("/driver/:driverId", async (req, res) => {
+  try {
+    const { driverId } = req.params;
+
+    const walletItems = await DriverWallet.find({ driverId, status: "approved" }).sort({ createdAt: -1 });
+
+    const total = walletItems.reduce((sum, item) => sum + item.amount, 0);
+
+    res.json({ success: true, total, walletItems });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 export default router;
