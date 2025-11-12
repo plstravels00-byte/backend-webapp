@@ -1,71 +1,59 @@
 import express from "express";
 import DriverWallet from "../models/DriverWallet.js";
-import Driver from "../models/Driver.js";
 
 const router = express.Router();
 
 /**
- * 🧾 MANAGER adds reward
+ * 🟢 Manager adds reward for driver
  */
 router.post("/add", async (req, res) => {
   try {
     const { driverId, branchId, amount, reason, addedBy } = req.body;
-
-    const reward = await DriverWallet.create({
+    const newReward = await DriverWallet.create({
       driverId,
       branchId,
       amount,
       reason,
       addedBy,
+      status: "pending",
     });
-
-    res.json({ success: true, reward });
+    res.json({ success: true, message: "Reward Added (Pending Approval)", data: newReward });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
 /**
- * 🧾 ADMIN approves or rejects reward
+ * 🟢 Admin approves reward
  */
 router.put("/approve/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    const reward = await DriverWallet.findByIdAndUpdate(
-      id,
-      { status },
+    const updated = await DriverWallet.findByIdAndUpdate(
+      req.params.id,
+      { status: "approved" },
       { new: true }
     );
-
-    // ✅ If approved, add amount to driver's walletBalance field
-    if (status === "approved") {
-      await Driver.findByIdAndUpdate(reward.driverId, {
-        $inc: { walletBalance: reward.amount },
-      });
-    }
-
-    res.json({ success: true, reward });
+    res.json({ success: true, message: "Reward Approved", data: updated });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
 /**
- * 🧾 DRIVER - get wallet transactions + balance
+ * 🔵 Get wallet for specific driver (only approved)
  */
 router.get("/driver/:driverId", async (req, res) => {
   try {
-    const { driverId } = req.params;
+    const rewards = await DriverWallet.find({
+      driverId: req.params.driverId,
+      status: "approved",
+    }).sort({ createdAt: -1 });
 
-    const walletItems = await DriverWallet.find({ driverId, status: "approved" }).sort({ createdAt: -1 });
-
-    const total = walletItems.reduce((sum, item) => sum + item.amount, 0);
-
-    res.json({ success: true, total, walletItems });
+    const total = rewards.reduce((acc, item) => acc + item.amount, 0);
+    res.json({ success: true, total, walletItems: rewards });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
