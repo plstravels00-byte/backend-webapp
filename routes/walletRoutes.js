@@ -21,12 +21,16 @@ router.post("/add", verifyToken, allowRoles("manager", "admin"), async (req, res
     const { driverId, branchId, amount, reason, addedBy } = req.body;
 
     if (!driverId || !amount) {
-      return res.status(400).json({ success: false, message: "Driver and amount required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Driver and amount required" });
     }
 
     const driver = await Driver.findById(driverId);
     if (!driver) {
-      return res.status(404).json({ success: false, message: "Driver not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Driver not found" });
     }
 
     const newReward = await DriverWallet.create({
@@ -73,7 +77,9 @@ router.put("/approve/:id", verifyToken, allowRoles("admin"), async (req, res) =>
   try {
     const reward = await DriverWallet.findById(req.params.id);
     if (!reward) {
-      return res.status(404).json({ success: false, message: "Reward not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Reward not found" });
     }
 
     reward.status = "approved";
@@ -96,7 +102,9 @@ router.put("/reject/:id", verifyToken, allowRoles("admin"), async (req, res) => 
   try {
     const reward = await DriverWallet.findById(req.params.id);
     if (!reward) {
-      return res.status(404).json({ success: false, message: "Reward not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Reward not found" });
     }
 
     reward.status = "rejected";
@@ -157,7 +165,7 @@ router.get("/driver/:driverId", verifyToken, async (req, res) => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 OPTIONAL: GENERIC ADMIN APPROVE/REJECT ENDPOINT */
+/* 🟢 GENERIC ADMIN APPROVE/REJECT ENDPOINT (Optional, not required) */
 /* -------------------------------------------------------------------------- */
 router.put("/:txnId/:action", verifyToken, allowRoles("admin"), approveTxn);
 
