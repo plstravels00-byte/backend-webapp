@@ -13,7 +13,8 @@ router.post("/add", async (req, res) => {
 
     // Validate driver
     const driver = await Driver.findById(driverId);
-    if (!driver) return res.status(404).json({ success: false, message: "Driver not found" });
+    if (!driver)
+      return res.status(404).json({ success: false, message: "Driver not found" });
 
     const reward = await DriverWallet.create({
       driverId,
@@ -24,7 +25,11 @@ router.post("/add", async (req, res) => {
       status: "pending",
     });
 
-    res.json({ success: true, message: "Reward Added (Pending Approval)", data: reward });
+    res.json({
+      success: true,
+      message: "Reward Added (Pending Approval)",
+      data: reward,
+    });
   } catch (err) {
     console.error("Error adding reward:", err);
     res.status(500).json({ success: false, message: "Server Error" });
@@ -44,7 +49,8 @@ router.put("/approve/:id", async (req, res) => {
       { new: true }
     );
 
-    if (!updated) return res.status(404).json({ success: false, message: "Reward not found" });
+    if (!updated)
+      return res.status(404).json({ success: false, message: "Reward not found" });
 
     res.json({ success: true, message: "Reward Approved", data: updated });
   } catch (err) {
@@ -54,21 +60,15 @@ router.put("/approve/:id", async (req, res) => {
 });
 
 /**
- * 🔵 Admin rejects reward
+ * 🔴 Admin rejects reward
  */
-router.put("/reject/:id", async (req, res) => {
+router.delete("/reject/:id", async (req, res) => {
   try {
-    const adminId = req.body.adminId || null;
+    const deleted = await DriverWallet.findByIdAndDelete(req.params.id);
+    if (!deleted)
+      return res.status(404).json({ success: false, message: "Reward not found" });
 
-    const updated = await DriverWallet.findByIdAndUpdate(
-      req.params.id,
-      { status: "rejected", approvedBy: adminId, approvedAt: new Date() },
-      { new: true }
-    );
-
-    if (!updated) return res.status(404).json({ success: false, message: "Reward not found" });
-
-    res.json({ success: true, message: "Reward Rejected", data: updated });
+    res.json({ success: true, message: "Reward Rejected", data: deleted });
   } catch (err) {
     console.error("Error rejecting reward:", err);
     res.status(500).json({ success: false, message: "Server Error" });
@@ -95,7 +95,7 @@ router.get("/driver/:driverId", async (req, res) => {
 });
 
 /**
- * 🔵 Admin - List pending approvals
+ * 🔵 Admin - List Pending + Approved rewards
  */
 router.get("/pending", async (req, res) => {
   try {
@@ -104,9 +104,14 @@ router.get("/pending", async (req, res) => {
       .populate("addedBy", "name")
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, data: pending });
+    const approved = await DriverWallet.find({ status: "approved" })
+      .populate("driverId", "name mobile")
+      .populate("addedBy", "name")
+      .sort({ updatedAt: -1 });
+
+    res.json({ success: true, pending, approved });
   } catch (err) {
-    console.error("Error listing pending:", err);
+    console.error("Error listing rewards:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
