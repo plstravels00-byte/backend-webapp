@@ -12,13 +12,11 @@ import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 const router = express.Router();
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 MANAGER / ADMIN: ADD REWARD (Pending Approval) */
+/* 🟢 MANAGER / ADMIN: ADD REWARD / ADVANCE / DEPOSIT / PENALTY (Pending) */
 /* -------------------------------------------------------------------------- */
-router.post("/create", verifyToken, allowRoles("manager", "admin"), createReward);
-
 router.post("/add", verifyToken, allowRoles("manager", "admin"), async (req, res) => {
   try {
-    const { driverId, branchId, amount, reason, addedBy } = req.body;
+    const { driverId, branchId, amount, reason, type, addedBy } = req.body;
 
     if (!driverId || !amount) {
       return res
@@ -26,35 +24,35 @@ router.post("/add", verifyToken, allowRoles("manager", "admin"), async (req, res
         .json({ success: false, message: "Driver and amount required" });
     }
 
+    // Validate driver
     const driver = await Driver.findById(driverId);
-    if (!driver) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Driver not found" });
-    }
+    if (!driver)
+      return res.status(404).json({ success: false, message: "Driver not found" });
 
-    const newReward = await DriverWallet.create({
+    // ✅ Create wallet entry with type (reward/advance/deposit/penalty)
+    const newEntry = await DriverWallet.create({
       driverId,
       branchId,
       amount: Number(amount),
       reason,
+      type: type || "reward",
       addedBy,
       status: "pending",
     });
 
     res.json({
       success: true,
-      message: "Reward Added (Pending Admin Approval)",
-      data: newReward,
+      message: `${type || "Reward"} Added (Pending Admin Approval)`,
+      data: newEntry,
     });
   } catch (err) {
-    console.error("Error adding reward:", err);
+    console.error("Error adding wallet entry:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
 /* -------------------------------------------------------------------------- */
-/* 🟡 ADMIN: LIST PENDING REWARDS */
+/* 🟡 ADMIN: LIST PENDING ENTRIES (ALL TYPES) */
 /* -------------------------------------------------------------------------- */
 router.get("/pending", verifyToken, allowRoles("admin"), async (req, res) => {
   try {
@@ -65,80 +63,82 @@ router.get("/pending", verifyToken, allowRoles("admin"), async (req, res) => {
 
     res.json({ success: true, data: pending });
   } catch (err) {
-    console.error("Error listing pending rewards:", err);
+    console.error("Error listing pending entries:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 ADMIN: APPROVE REWARD */
+/* 🟢 ADMIN: APPROVE ENTRY */
 /* -------------------------------------------------------------------------- */
 router.put("/approve/:id", verifyToken, allowRoles("admin"), async (req, res) => {
   try {
-    const reward = await DriverWallet.findById(req.params.id);
-    if (!reward) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Reward not found" });
-    }
+    const entry = await DriverWallet.findById(req.params.id);
+    if (!entry)
+      return res.status(404).json({ success: false, message: "Entry not found" });
 
-    reward.status = "approved";
-    reward.approvedBy = req.user._id;
-    reward.approvedAt = new Date();
+    entry.status = "approved";
+    entry.approvedBy = req.user._id;
+    entry.approvedAt = new Date();
 
-    await reward.save();
+    await entry.save();
 
-    res.json({ success: true, message: "Reward Approved", data: reward });
+    res.json({ success: true, message: `${entry.type} Approved`, data: entry });
   } catch (err) {
-    console.error("Error approving reward:", err);
+    console.error("Error approving entry:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
 /* -------------------------------------------------------------------------- */
-/* 🔴 ADMIN: REJECT REWARD */
+/* 🔴 ADMIN: REJECT ENTRY */
 /* -------------------------------------------------------------------------- */
 router.put("/reject/:id", verifyToken, allowRoles("admin"), async (req, res) => {
   try {
-    const reward = await DriverWallet.findById(req.params.id);
-    if (!reward) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Reward not found" });
-    }
+    const entry = await DriverWallet.findById(req.params.id);
+    if (!entry)
+      return res.status(404).json({ success: false, message: "Entry not found" });
 
-    reward.status = "rejected";
-    reward.approvedBy = req.user._id;
-    reward.approvedAt = new Date();
+    entry.status = "rejected";
+    entry.approvedBy = req.user._id;
+    entry.approvedAt = new Date();
 
-    await reward.save();
+    await entry.save();
 
-    res.json({ success: true, message: "Reward Rejected", data: reward });
+    res.json({ success: true, message: `${entry.type} Rejected`, data: entry });
   } catch (err) {
-    console.error("Error rejecting reward:", err);
+    console.error("Error rejecting entry:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 ADMIN: LIST ALL APPROVED REWARDS */
+/* 🟢 ADMIN: LIST ALL APPROVED ENTRIES (Grouped by Type) */
 /* -------------------------------------------------------------------------- */
-router.get("/driver/all-approved", verifyToken, allowRoles("admin"), async (req, res) => {
+router.get("/all-approved", verifyToken, allowRoles("admin"), async (req, res) => {
   try {
     const approved = await DriverWallet.find({ status: "approved" })
       .populate("driverId", "name mobile branch")
       .populate("addedBy", "name email")
       .sort({ updatedAt: -1 });
 
-    res.json({ success: true, data: approved });
+    // 🧠 Group by type
+    const grouped = {
+      reward: approved.filter((e) => e.type === "reward"),
+      advance: approved.filter((e) => e.type === "advance"),
+      deposit: approved.filter((e) => e.type === "deposit"),
+      penalty: approved.filter((e) => e.type === "penalty"),
+    };
+
+    res.json({ success: true, grouped, totalCount: approved.length });
   } catch (err) {
-    console.error("Error listing approved rewards:", err);
+    console.error("Error listing approved entries:", err);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 DRIVER: VIEW OWN WALLET (APPROVED ONLY) */
+/* 🟢 DRIVER: VIEW OWN WALLET (Approved Only, All Types) */
 /* -------------------------------------------------------------------------- */
 router.get("/driver/:driverId", verifyToken, async (req, res) => {
   try {
@@ -146,16 +146,35 @@ router.get("/driver/:driverId", verifyToken, async (req, res) => {
 
     const rewards = await DriverWallet.find({
       driverId,
-      status: { $regex: /^approved$/i },
+      status: "approved",
     })
       .populate("addedBy", "name email")
       .sort({ createdAt: -1 });
 
-    const total = rewards.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const totalRewards = rewards
+      .filter((e) => e.type === "reward")
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+    const totalAdvance = rewards
+      .filter((e) => e.type === "advance")
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+    const totalDeposit = rewards
+      .filter((e) => e.type === "deposit")
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+    const totalPenalty = rewards
+      .filter((e) => e.type === "penalty")
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
     res.json({
       success: true,
-      total: Number(total.toFixed(2)),
+      totals: {
+        reward: totalRewards,
+        advance: totalAdvance,
+        deposit: totalDeposit,
+        penalty: totalPenalty,
+      },
       walletItems: rewards,
     });
   } catch (err) {
@@ -165,7 +184,7 @@ router.get("/driver/:driverId", verifyToken, async (req, res) => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 GENERIC ADMIN APPROVE/REJECT ENDPOINT (Optional, not required) */
+/* 🟢 GENERIC ADMIN APPROVE/REJECT ENDPOINT (Optional) */
 /* -------------------------------------------------------------------------- */
 router.put("/:txnId/:action", verifyToken, allowRoles("admin"), approveTxn);
 
