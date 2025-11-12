@@ -1,17 +1,18 @@
 import express from "express";
 import DriverWallet from "../models/DriverWallet.js";
 import Driver from "../models/Driver.js";
+import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 /**
- * 🟢 Manager adds reward for driver (pending)
+ * 🟢 MANAGER adds reward (pending)
  */
-router.post("/add", async (req, res) => {
+router.post("/add", verifyToken, allowRoles("manager"), async (req, res) => {
   try {
-    const { driverId, branchId, amount, reason, addedBy } = req.body;
+    const { driverId, branchId, amount, reason } = req.body;
+    const addedBy = req.user._id;
 
-    // Validate driver
     const driver = await Driver.findById(driverId);
     if (!driver)
       return res.status(404).json({ success: false, message: "Driver not found" });
@@ -27,7 +28,7 @@ router.post("/add", async (req, res) => {
 
     res.json({
       success: true,
-      message: "Reward Added (Pending Approval)",
+      message: "Reward Added (Pending Admin Approval)",
       data: reward,
     });
   } catch (err) {
@@ -37,15 +38,13 @@ router.post("/add", async (req, res) => {
 });
 
 /**
- * 🟢 Admin approves reward
+ * 🟣 ADMIN approves reward
  */
-router.put("/approve/:id", async (req, res) => {
+router.put("/approve/:id", verifyToken, allowRoles("admin"), async (req, res) => {
   try {
-    const adminId = req.body.adminId || null;
-
     const updated = await DriverWallet.findByIdAndUpdate(
       req.params.id,
-      { status: "approved", approvedBy: adminId, approvedAt: new Date() },
+      { status: "approved", approvedBy: req.user._id, approvedAt: new Date() },
       { new: true }
     );
 
@@ -60,9 +59,9 @@ router.put("/approve/:id", async (req, res) => {
 });
 
 /**
- * 🔴 Admin rejects reward
+ * 🔴 ADMIN rejects reward
  */
-router.delete("/reject/:id", async (req, res) => {
+router.delete("/reject/:id", verifyToken, allowRoles("admin"), async (req, res) => {
   try {
     const deleted = await DriverWallet.findByIdAndDelete(req.params.id);
     if (!deleted)
@@ -76,28 +75,9 @@ router.delete("/reject/:id", async (req, res) => {
 });
 
 /**
- * 🔵 Get wallet for specific driver (only approved)
+ * 🔵 Admin - View all (pending + approved)
  */
-router.get("/driver/:driverId", async (req, res) => {
-  try {
-    const rewards = await DriverWallet.find({
-      driverId: req.params.driverId,
-      status: "approved",
-    }).sort({ createdAt: -1 });
-
-    const total = rewards.reduce((sum, item) => sum + item.amount, 0);
-
-    res.json({ success: true, total, walletItems: rewards });
-  } catch (err) {
-    console.error("Error fetching wallet:", err);
-    res.status(500).json({ success: false, message: "Server Error" });
-  }
-});
-
-/**
- * 🔵 Admin - List Pending + Approved rewards
- */
-router.get("/pending", async (req, res) => {
+router.get("/pending", verifyToken, allowRoles("admin"), async (req, res) => {
   try {
     const pending = await DriverWallet.find({ status: "pending" })
       .populate("driverId", "name mobile")
@@ -115,5 +95,3 @@ router.get("/pending", async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 });
-
-export default router;
