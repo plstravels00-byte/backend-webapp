@@ -1,137 +1,148 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
-import toast, { Toaster } from "react-hot-toast";
+// server/routes/walletRoutes.js
+import express from "express";
+import {
+  createReward,
+  listDriverWallet,
+  listPending,
+  approveTxn,
+} from "../controllers/walletController.js";
+import mongoose from "mongoose";
+import DriverWallet from "../models/DriverWallet.js";
+import Driver from "../models/Driver.js";
+import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 
-const API_BASE = "https://backend-webapp-vk8x.onrender.com";
+const router = express.Router();
 
-const ManagerAddReward = () => {
-  const [drivers, setDrivers] = useState([]);
-  const [form, setForm] = useState({
-    driverId: "",
-    amount: "",
-    reason: "",
-  });
+/**
+ * 🟢 Manager adds reward (pending)
+ * 🟢 Manager adds reward (goes to admin for approval)
+*/
+router.post("/create", verifyToken, allowRoles("manager", "admin"), createReward);
+router.post("/add", verifyToken, allowRoles("manager", "admin"), async (req, res) => {
+  try {
+    const { driverId, branchId, amount, reason, addedBy } = req.body;
 
-  useEffect(() => {
-    loadDrivers();
-  }, []);
+    // ✅ Validate driver
+    const driver = await Driver.findById(driverId);
+    if (!driver) return res.status(404).json({ success: false, message: "Driver not found" });
 
-  // 🔹 Fetch all drivers
-  const loadDrivers = async () => {
-    try {
-      const res = await axios.get(`${API_BASE}/api/drivers`);
-      setDrivers(res.data || []);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to load drivers");
-    }
-  };
+    const newReward = await DriverWallet.create({
+      driverId,
+      branchId,
+      amount,
+      reason,
+      addedBy,
+      status: "pending",
+    });
 
-  // 🔹 Add Reward
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.driverId || !form.amount || !form.reason) {
-      toast.error("Please fill all fields");
-      return;
-    }
+    res.json({ success: true, message: "Reward Added (Pending Approval)", data: newReward });
+  } catch (err) {
+    console.error("Error adding reward:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
 
-    try {
-      await axios.post(`${API_BASE}/api/wallet/add`, {
-        driverId: form.driverId,
-        amount: form.amount,
-        reason: form.reason,
-        addedBy: "manager", // optional — backend will link actual user if session available
-      });
-      toast.success("Reward added successfully 🎉");
-      setForm({ driverId: "", amount: "", reason: "" });
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to add reward");
-    }
-  };
+/**
+ * 🔵 Admin/Manager: View pending rewards
+ * 🟢 Admin approves reward
+*/
+router.get("/pending", verifyToken, allowRoles("admin"), async (req, res, next) => {
+router.put("/approve/:id", verifyToken, allowRoles("admin"), async (req, res) => {
+try {
+    const data = await listPending(req, res);
+    return data;
+    const updated = await DriverWallet.findByIdAndUpdate(
+      req.params.id,
+      { status: "approved", approvedAt: new Date(), approvedBy: req.user._id },
+      { new: true }
+    );
 
-  return (
-    <div className="text-gray-800">
-      <Toaster />
-      <h2 className="text-2xl font-bold text-green-600 mb-4">
-        ➕ Add Wallet Reward (Manager)
-      </h2>
+    if (!updated) return res.status(404).json({ success: false, message: "Reward not found" });
+    res.json({ success: true, message: "Reward Approved", data: updated });
+} catch (err) {
+    next(err);
+    console.error("Error approving reward:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+}
+});
 
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-md max-w-3xl mx-auto">
-        <form
-          onSubmit={handleSubmit}
-          className="grid grid-cols-1 md:grid-cols-3 gap-4"
-        >
-          {/* Driver Select */}
-          <div>
-            <label className="block text-sm font-semibold mb-1">
-              Select Driver
-            </label>
-            <select
-              value={form.driverId}
-              onChange={(e) =>
-                setForm({ ...form, driverId: e.target.value })
-              }
-              className="border border-gray-300 rounded p-2 w-full"
-            >
-              <option value="">Choose Driver</option>
-              {drivers.map((d) => (
-                <option key={d._id} value={d._id}>
-                  {d.name} ({d.mobile})
-                </option>
-              ))}
-            </select>
-          </div>
+/**
+ * 🟢 Admin approves/rejects a transaction
+ * (action = approve / reject)
+ * 🔴 Admin rejects reward
+*/
+router.put("/:txnId/:action", verifyToken, allowRoles("admin"), approveTxn);
+router.put("/reject/:id", verifyToken, allowRoles("admin"), async (req, res) => {
+  try {
+    const updated = await DriverWallet.findByIdAndUpdate(
+      req.params.id,
+      { status: "rejected", approvedAt: new Date(), approvedBy: req.user._id },
+      { new: true }
+    );
 
-          {/* Amount Input */}
-          <div>
-            <label className="block text-sm font-semibold mb-1">
-              Reward Amount (₹)
-            </label>
-            <input
-              type="number"
-              placeholder="Enter Amount"
-              value={form.amount}
-              onChange={(e) =>
-                setForm({ ...form, amount: e.target.value })
-              }
-              className="border border-gray-300 rounded p-2 w-full"
-            />
-          </div>
+    if (!updated) return res.status(404).json({ success: false, message: "Reward not found" });
+    res.json({ success: true, message: "Reward Rejected", data: updated });
+  } catch (err) {
+    console.error("Error rejecting reward:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
 
-          {/* Reason Input */}
-          <div>
-            <label className="block text-sm font-semibold mb-1">
-              Reason / Note
-            </label>
-            <input
-              type="text"
-              placeholder="Enter Reason"
-              value={form.reason}
-              onChange={(e) =>
-                setForm({ ...form, reason: e.target.value })
-              }
-              className="border border-gray-300 rounded p-2 w-full"
-            />
-          </div>
+/**
+ * 🟢 Driver: View wallet balance + history
+ * 🟢 Admin - List all pending rewards
+*/
+router.get("/driver/:driverId", verifyToken, listDriverWallet);
+router.get("/pending", verifyToken, allowRoles("admin"), async (req, res) => {
+  try {
+    const pending = await DriverWallet.find({ status: "pending" })
+      .populate("driverId", "name mobile")
+      .populate("addedBy", "name email")
+      .sort({ createdAt: -1 });
 
-          {/* Submit Button */}
-          <div className="md:col-span-3">
-            <button
-              type="submit"
-              className="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg mt-2 w-full md:w-auto"
-            >
-              Add Reward
-            </button>
-          </div>
-        </form>
-      </div>
+    res.json({ success: true, data: pending });
+  } catch (err) {
+    console.error("Error listing pending rewards:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
 
-      <div className="mt-6 text-sm text-gray-600 text-center">
-        After adding, Admin needs to approve this reward to reflect in driver wallet.
-      </div>
-    </div>
-  );
-};
+/**
+ * 🟢 Admin: Get all approved transactions
+ * 🟢 Admin - List all approved rewards (for admin dashboard)
+*/
+router.get("/approved", verifyToken, allowRoles("admin"), async (req, res) => {
+router.get("/driver/all-approved", verifyToken, allowRoles("admin"), async (req, res) => {
+try {
+    const approved = await WalletTxn.find({ status: "approved" })
+    const approved = await DriverWallet.find({ status: "approved" })
+.populate("driverId", "name mobile")
+.populate("addedBy", "name email")
+.sort({ updatedAt: -1 });
 
-export default ManagerAddReward;
+res.json({ success: true, data: approved });
+} catch (err) {
+    console.error("listApproved:", err);
+    res.status(500).json({ message: "Server error" });
+    console.error("Error listing approved rewards:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
+/**
+ * 🟢 Driver - Get wallet balance + history (only approved)
+ */
+router.get("/driver/:driverId", verifyToken, async (req, res) => {
+  try {
+    const rewards = await DriverWallet.find({
+      driverId: req.params.driverId,
+      status: "approved",
+    }).sort({ createdAt: -1 });
+
+    const total = rewards.reduce((sum, item) => sum + item.amount, 0);
+    res.json({ success: true, total, walletItems: rewards });
+  } catch (err) {
+    console.error("Error fetching driver wallet:", err);
+    res.status(500).json({ success: false, message: "Server Error" });
+}
+});
