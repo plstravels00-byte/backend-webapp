@@ -12,7 +12,7 @@ import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 const router = express.Router();
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 MANAGER / ADMIN: ADD REWARD (PENDING APPROVAL) */
+/* 🟢 MANAGER / ADMIN: ADD REWARD (Pending Approval) */
 /* -------------------------------------------------------------------------- */
 router.post("/create", verifyToken, allowRoles("manager", "admin"), createReward);
 
@@ -55,7 +55,7 @@ router.post("/add", verifyToken, allowRoles("manager", "admin"), async (req, res
 router.get("/pending", verifyToken, allowRoles("admin"), async (req, res) => {
   try {
     const pending = await DriverWallet.find({ status: "pending" })
-      .populate("driverId", "name mobile")
+      .populate("driverId", "name mobile branch")
       .populate("addedBy", "name email")
       .sort({ createdAt: -1 });
 
@@ -118,7 +118,7 @@ router.put("/reject/:id", verifyToken, allowRoles("admin"), async (req, res) => 
 router.get("/driver/all-approved", verifyToken, allowRoles("admin"), async (req, res) => {
   try {
     const approved = await DriverWallet.find({ status: "approved" })
-      .populate("driverId", "name mobile")
+      .populate("driverId", "name mobile branch")
       .populate("addedBy", "name email")
       .sort({ updatedAt: -1 });
 
@@ -157,7 +157,7 @@ router.get("/driver/:driverId", verifyToken, async (req, res) => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 ADMIN: GENERIC APPROVE/REJECT ENDPOINT (OPTIONAL) */
+/* 🟢 OPTIONAL: GENERIC ADMIN APPROVE/REJECT ENDPOINT */
 /* -------------------------------------------------------------------------- */
 router.put("/:txnId/:action", verifyToken, allowRoles("admin"), approveTxn);
 
