@@ -3,42 +3,53 @@ import Driver from "../models/Driver.js";
 import mongoose from "mongoose";
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 Manager/Admin: Create Transaction (Reward, Advance, Deposit, Penalty) */
+/* 🟢 MANAGER / ADMIN: ADD TRANSACTION (Add / Less) */
 /* -------------------------------------------------------------------------- */
-export const createReward = async (req, res) => {
+export const createTransaction = async (req, res) => {
   try {
-    const { driverId, amount, reason, type } = req.body;
-    const addedBy = req.user?._id;
+    const { driverId, branchId, amount, reason, type, addedBy, action } = req.body;
 
-    if (!driverId || !amount || !type) {
-      return res.status(400).json({ success: false, message: "Driver ID, amount, and type required" });
+    if (!driverId || !amount) {
+      return res.status(400).json({
+        success: false,
+        message: "Driver and amount are required",
+      });
     }
 
+    // Validate driver existence
     const driver = await Driver.findById(driverId);
-    if (!driver) return res.status(404).json({ success: false, message: "Driver not found" });
+    if (!driver) {
+      return res.status(404).json({ success: false, message: "Driver not found" });
+    }
 
+    // ✅ Always store positive amount
+    const absAmount = Math.abs(Number(amount));
+
+    // Create transaction
     const txn = await DriverWallet.create({
       driverId: mongoose.Types.ObjectId(driverId),
-      amount: Number(amount),
-      reason: reason || `${type} transaction added`,
+      branchId,
+      amount: absAmount,
+      reason: reason || `${type} ${action === "less" ? "deducted" : "added"}`,
       addedBy,
+      type,
+      action,
       status: "pending",
-      type, // ✅ reward / advance / deposit / penalty
     });
 
-    return res.json({
+    res.json({
       success: true,
-      message: `${type.toUpperCase()} created (Pending Admin Approval)`,
-      txn,
+      message: `${type || "Reward"} ${action === "less" ? "Deducted" : "Added"} (Pending Admin Approval)`,
+      data: txn,
     });
   } catch (err) {
-    console.error("createReward:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error("createTransaction:", err);
+    res.status(500).json({ success: false, message: err.message || "Server error" });
   }
 };
 
 /* -------------------------------------------------------------------------- */
-/* 🟡 Admin: List Pending Transactions */
+/* 🟡 ADMIN: LIST PENDING TRANSACTIONS */
 /* -------------------------------------------------------------------------- */
 export const listPending = async (req, res) => {
   try {
@@ -47,40 +58,53 @@ export const listPending = async (req, res) => {
       .populate("addedBy", "name email")
       .sort({ createdAt: -1 });
 
-    return res.json({ success: true, data: pending });
+    res.json({ success: true, data: pending });
   } catch (err) {
     console.error("listPending:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 Admin: List All Approved Transactions (Grouped by Type) */
+/* 🟢 ADMIN: APPROVE OR REJECT TRANSACTION */
 /* -------------------------------------------------------------------------- */
-export const listApprovedGrouped = async (req, res) => {
+export const approveOrReject = async (req, res) => {
   try {
-    const approved = await DriverWallet.find({ status: "approved" })
-      .populate("driverId", "name mobile branch")
-      .populate("addedBy", "name email")
-      .sort({ updatedAt: -1 });
+    const { txnId } = req.params;
+    const { action } = req.body; // approve / reject
+    const adminId = req.user._id;
 
-    // ✅ Group by type
-    const grouped = { reward: [], advance: [], deposit: [], penalty: [] };
-    approved.forEach((txn) => {
-      if (txn.type && grouped[txn.type]) grouped[txn.type].push(txn);
+    const txn = await DriverWallet.findById(txnId);
+    if (!txn) return res.status(404).json({ success: false, message: "Transaction not found" });
+    if (txn.status !== "pending")
+      return res.status(400).json({ success: false, message: "Transaction already processed" });
+
+    if (action === "reject") {
+      txn.status = "rejected";
+    } else {
+      txn.status = "approved";
+    }
+
+    txn.approvedBy = adminId;
+    txn.approvedAt = new Date();
+
+    await txn.save();
+
+    res.json({
+      success: true,
+      message: `Transaction ${txn.status.toUpperCase()}`,
+      data: txn,
     });
-
-    return res.json({ success: true, grouped });
   } catch (err) {
-    console.error("listApprovedGrouped:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error("approveOrReject:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 Driver: View Wallet (Grouped by Type) */
+/* 🟢 DRIVER: VIEW WALLET DETAILS */
 /* -------------------------------------------------------------------------- */
-export const listDriverWallet = async (req, res) => {
+export const viewDriverWallet = async (req, res) => {
   try {
     const { driverId } = req.params;
 
@@ -91,61 +115,46 @@ export const listDriverWallet = async (req, res) => {
       .populate("addedBy", "name email")
       .sort({ createdAt: -1 });
 
-    // ✅ Group and calculate totals
-    const grouped = { reward: [], advance: [], deposit: [], penalty: [] };
-    const totals = { reward: 0, advance: 0, deposit: 0, penalty: 0 };
+    // Group & total by action
+    let totalAdd = 0;
+    let totalLess = 0;
 
     txns.forEach((txn) => {
-      if (txn.type && grouped[txn.type]) {
-        grouped[txn.type].push(txn);
-        totals[txn.type] += txn.amount;
-      }
+      if (txn.action === "add") totalAdd += txn.amount;
+      else totalLess += txn.amount;
     });
 
-    const netBalance = totals.reward + totals.deposit - (totals.advance + totals.penalty);
+    const netBalance = totalAdd - totalLess;
 
-    return res.json({
+    res.json({
       success: true,
-      totals,
-      netBalance,
-      grouped,
+      totals: { totalAdd, totalLess, netBalance },
+      data: txns,
     });
   } catch (err) {
-    console.error("listDriverWallet:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error("viewDriverWallet:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
 /* -------------------------------------------------------------------------- */
-/* 🟢 Admin: Approve / Reject Transaction */
+/* 🟢 ADMIN: LIST ALL APPROVED (Grouped by Type) */
 /* -------------------------------------------------------------------------- */
-export const approveTxn = async (req, res) => {
+export const listApprovedGrouped = async (req, res) => {
   try {
-    const { txnId } = req.params;
-    const { action } = req.body; // "approve" or "reject"
-    const adminId = req.user?._id;
+    const approved = await DriverWallet.find({ status: "approved" })
+      .populate("driverId", "name mobile branch")
+      .populate("addedBy", "name email")
+      .sort({ updatedAt: -1 });
 
-    const txn = await DriverWallet.findById(txnId);
-    if (!txn) return res.status(404).json({ message: "Transaction not found" });
-    if (txn.status !== "pending")
-      return res.status(400).json({ message: "Transaction already processed" });
+    const grouped = { reward: [], advance: [], deposit: [], penalty: [] };
+    approved.forEach((txn) => {
+      if (txn.type && grouped[txn.type]) grouped[txn.type].push(txn);
+    });
 
-    if (action === "reject") {
-      txn.status = "rejected";
-      txn.approvedBy = adminId;
-      txn.approvedAt = new Date();
-      await txn.save();
-      return res.json({ success: true, message: "Transaction Rejected", txn });
-    }
-
-    txn.status = "approved";
-    txn.approvedBy = adminId;
-    txn.approvedAt = new Date();
-    await txn.save();
-
-    return res.json({ success: true, message: "Transaction Approved", txn });
+    res.json({ success: true, grouped });
   } catch (err) {
-    console.error("approveTxn:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error("listApprovedGrouped:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
