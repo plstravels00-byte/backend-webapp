@@ -1,15 +1,30 @@
 import express from "express";
 import DriverService from "../models/DriverService.js";
-import Vehicle from "../models/Vehicle.js";
-import Driver from "../models/Driver.js";
-import { authMiddleware } from "../middleware/authMiddleware.js";
+import * as authModule from "../middleware/authMiddleware.js";
+
+/**
+ * ✅ Resolve auth middleware safely (no export mismatch ever)
+ */
+const auth =
+  authModule.authMiddleware ||
+  authModule.default ||
+  authModule.verifyToken;
 
 const router = express.Router();
 
 /* ============== CREATE SERVICE RECORD ============== */
-router.post("/create", authMiddleware, async (req, res) => {
+router.post("/create", auth, async (req, res) => {
   try {
-    const { driverId, vehicleId, branchId, serviceDate, serviceCenter, description, cost } = req.body;
+    const {
+      driverId,
+      vehicleId,
+      branchId,
+      serviceDate,
+      serviceCenter,
+      description,
+      cost,
+    } = req.body;
+
     if (!driverId || !vehicleId || !branchId || !serviceDate) {
       return res.status(400).json({ message: "Missing required fields" });
     }
@@ -37,9 +52,10 @@ router.post("/create", authMiddleware, async (req, res) => {
 });
 
 /* ============== GET RECORDS BY BRANCH ============== */
-router.get("/branch/:branchId", authMiddleware, async (req, res) => {
+router.get("/branch/:branchId", auth, async (req, res) => {
   try {
     const { branchId } = req.params;
+
     const records = await DriverService.find({ branchId })
       .populate("driverId", "name mobile")
       .populate("vehicleId", "vehicleNumber")
