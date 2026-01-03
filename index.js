@@ -1,135 +1,192 @@
 import express from "express";
-import mongoose from "mongoose";
-import dotenv from "dotenv";
-import cors from "cors";
-import path from "path";
-import { fileURLToPath } from "url";
-import http from "http";
-import { Server } from "socket.io";
+import DriverWallet from "../models/DriverWallet.js";
+import Driver from "../models/Driver.js";
+import { verifyToken, allowRoles } from "../middleware/authMiddleware.js";
 
-// ✅ Import Routes
-import authRoutes from "./routes/authRoutes.js";
-import userRoutes from "./routes/userRoutes.js";
-import branchRoutes from "./routes/branchRoutes.js";
-import driverRoutes from "./routes/driverRoutes.js";
-import driverLocationRoutes from "./routes/driverLocationRoutes.js";
-import driverDutyRoutes from "./routes/driverDutyRoutes.js";
-import managerRoutes from "./routes/ManagerRoutes.js";
-import managerTripsheetRoutes from "./routes/managerTripsheetRoutes.js";
-import salarySchemeRoutes from "./routes/salarySchemeRoutes.js";
-import assignSalaryRoutes from "./routes/assignSalaryRoutes.js";
-import vehicleRoutes from "./routes/vehicleRoutes.js";
-import driverServiceRoutes from "./routes/driverServiceRoutes.js";
+const router = express.Router();
 
-// ✅ BFF ROUTE (NEW)
-import ledgerBffRoutes from "./routes/bff/ledgerBffRoutes.js";
+/* Clean Unicode / unwanted characters like ¹, ₹, spaces */
+const clean = (v) => Number(String(v).replace(/[^\d-]/g, "")) || 0;
 
-dotenv.config();
+/* -------------------------------------------------------------------------- */
+/* 🟢 MANAGER / ADMIN: ADD / LESS TRANSACTION */
+/* -------------------------------------------------------------------------- */
+router.post("/add", verifyToken, allowRoles("manager", "admin"), async (req, res) => {
+  try {
+    const { driverId, branchId, amount, reason, type, addedBy, action } = req.body;
 
-const app = express();
-const server = http.createServer(app);
+    if (!driverId || !amount)
+      return res.status(400).json({ success: false, message: "Driver & amount are required" });
 
-// ✅ Socket Setup
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-  },
+    const driver = await Driver.findById(driverId);
+    if (!driver) return res.status(404).json({ success: false, message: "Driver not found" });
+
+    const absAmount = Math.abs(clean(amount));
+
+    const newEntry = await DriverWallet.create({
+      driverId,
+      branchId,
+      amount: absAmount,
+      reason,
+      type,
+      action: action || "add",
+      addedBy,
+      status: "pending",
+    });
+
+    res.json({ success: true, message: "Transaction Submitted (Pending Approval)", data: newEntry });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
 });
 
-// ✅ Middleware
-app.use(cors({ origin: "*" }));
-app.use(express.json());
+/* -------------------------------------------------------------------------- */
+/* 🟡 LIST PENDING TRANSACTIONS */
+/* -------------------------------------------------------------------------- */
+router.get("/pending", verifyToken, allowRoles("admin"), async (req, res) => {
+  try {
+    const pending = await DriverWallet.find({ status: "pending" })
+      .populate("driverId", "name mobile branch")
+      .populate("addedBy", "name email")
+      .sort({ createdAt: -1 });
 
-// ✅ Static Upload Folder
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+    res.json({ success: true, data: pending });
 
-// =======================
-// ✅ ROUTES
-// =======================
-
-// Auth & Core
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/branches", branchRoutes);
-
-// Driver
-app.use("/api/drivers", driverRoutes);
-app.use("/api/driver-location", driverLocationRoutes);
-app.use("/api/driver-duty", driverDutyRoutes);
-app.use("/api/driver-service", driverServiceRoutes);
-
-// Manager
-app.use("/api/manager", managerRoutes);
-app.use("/api/manager", managerTripsheetRoutes);
-
-// Salary / Ledger (Internal APIs)
-app.use("/api/salary-schemes", salarySchemeRoutes);
-app.use("/api/driver-salary", assignSalaryRoutes);
-
-// Vehicles
-app.use("/api/vehicles", vehicleRoutes);
-
-// ✅ BFF (FRONTEND SHOULD USE ONLY THIS FOR LEDGER)
-app.use("/api/bff", ledgerBffRoutes);
-
-// =======================
-// ✅ BASE ROUTE
-// =======================
-app.get("/", (req, res) => {
-  res.send("✅ Backend API is Live and Running!");
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
 });
 
-// =======================
-// ✅ DATABASE
-// =======================
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB Connected Successfully"))
-  .catch((err) => console.error("❌ MongoDB Connection Error:", err));
+/* -------------------------------------------------------------------------- */
+/* 🟢 APPROVE TRANSACTION */
+/* -------------------------------------------------------------------------- */
+router.put("/approve/:id", verifyToken, allowRoles("admin"), async (req, res) => {
+  try {
+    const entry = await DriverWallet.findById(req.params.id);
+    if (!entry) return res.status(404).json({ success: false, message: "Transaction not found" });
 
-// =======================
-// ✅ SOCKET.IO
-// =======================
-app.set("io", io);
+    entry.status = "approved";
+    entry.approvedAt = new Date();
+    entry.approvedBy = req.user._id;
+    await entry.save();
 
-io.on("connection", (socket) => {
-  console.log("⚡ User Connected:", socket.id);
+    res.json({ success: true, message: "Transaction Approved", data: entry });
 
-  socket.on("updateLocation", (data) => {
-    io.emit("driverLocationUpdate", data);
-  });
-
-  socket.on("joinBranch", (branchId) => {
-    if (branchId) {
-      socket.join(String(branchId));
-      console.log(`👥 ${socket.id} joined branch ${branchId}`);
-    }
-  });
-
-  socket.on("driverOnDuty", (data) => {
-    if (data?.branchId) {
-      io.to(String(data.branchId)).emit("driverOnDuty", data);
-    }
-  });
-
-  socket.on("tripCompleted", (data) => {
-    if (data?.branchId) {
-      io.to(String(data.branchId)).emit("tripCompleted", data);
-    }
-  });
-
-  socket.on("disconnect", () => {
-    console.log("❌ User Disconnected:", socket.id);
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
 });
 
-// =======================
-// ✅ START SERVER
-// =======================
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () =>
-  console.log(`🌍 Server Running on Port ${PORT}`)
-);
+/* -------------------------------------------------------------------------- */
+/* 🛑 REJECT TRANSACTION */
+/* -------------------------------------------------------------------------- */
+router.put("/reject/:id", verifyToken, allowRoles("admin"), async (req, res) => {
+  try {
+    const entry = await DriverWallet.findById(req.params.id);
+    if (!entry) return res.status(404).json({ success: false, message: "Transaction not found" });
+
+    entry.status = "rejected";
+    entry.approvedAt = new Date();
+    entry.approvedBy = req.user._id;
+    await entry.save();
+
+    res.json({ success: true, message: "Transaction Rejected", data: entry });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* ✔ ALL APPROVED TRANSACTIONS GROUPED By Type */
+/* -------------------------------------------------------------------------- */
+router.get("/all-approved", verifyToken, allowRoles("admin"), async (req, res) => {
+  try {
+    const approved = await DriverWallet.find({ status: "approved" })
+      .populate("driverId", "name mobile branch")
+      .populate("addedBy", "name email")
+      .sort({ approvedAt: -1 });
+
+    const grouped = {
+      reward: approved.filter((t) => t.type === "reward"),
+      advance: approved.filter((t) => t.type === "advance"),
+      deposit: approved.filter((t) => t.type === "deposit"),
+      penalty: approved.filter((t) => t.type === "penalty"),
+    };
+
+    res.json({ success: true, grouped, total: approved.length });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* 📘 DRIVER PASSBOOK WITH RUNNING BALANCE */
+/* -------------------------------------------------------------------------- */
+router.get("/driver/:driverId", verifyToken, async (req, res) => {
+  try {
+    const { driverId } = req.params;
+
+    const driver = await Driver.findById(driverId).select("name mobile");
+    if (!driver) return res.status(404).json({ success: false, message: "Driver not found" });
+
+    const entries = await DriverWallet.find({ driverId, status: "approved" }).sort({ createdAt: 1 });
+
+    let balance = 0;
+    const passbook = entries.map((t) => {
+      const amt = (t.type === "reward" || t.type === "deposit") ? clean(t.amount) : -clean(t.amount);
+      balance += amt;
+
+      return {
+        id: t._id,
+        date: t.createdAt.toLocaleDateString("en-IN"),
+        type: t.type,
+        reason: t.reason,
+        amount: amt,
+        balance,
+      };
+    });
+
+    res.json({ success: true, driver, passbook });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
+/* -------------------------------------------------------------------------- */
+/* 📊 ALL DRIVER LEDGER SUMMARY */
+/* -------------------------------------------------------------------------- */
+router.get("/ledger/all-drivers", verifyToken, allowRoles("manager", "admin"), async (req, res) => {
+  try {
+    const drivers = await Driver.find({}).select("name mobile");
+
+    const summary = await DriverWallet.aggregate([
+      { $match: { status: "approved" } },
+      {
+        $group: {
+          _id: "$driverId",
+          reward: { $sum: { $cond: [{ $eq: ["$type", "reward"] }, "$amount", 0] }},
+          advance: { $sum: { $cond: [{ $eq: ["$type", "advance"] }, "$amount", 0] }},
+          deposit: { $sum: { $cond: [{ $eq: ["$type", "deposit"] }, "$amount", 0] }},
+          penalty: { $sum: { $cond: [{ $eq: ["$type", "penalty"] }, "$amount", 0] }},
+        },
+      },
+    ]);
+
+    const result = drivers.map((d) => {
+      const row = summary.find((x) => x._id?.toString() === d._id?.toString()) || {};
+      const balance = (row.reward || 0) + (row.deposit || 0) - ((row.advance || 0) + (row.penalty || 0));
+      return { driverId: d._id, name: d.name, mobile: d.mobile, ...row, balance };
+    });
+
+    res.json({ success: true, data: result });
+
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+});
+
+export default router;
