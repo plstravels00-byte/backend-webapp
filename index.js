@@ -21,12 +21,15 @@ import assignSalaryRoutes from "./routes/assignSalaryRoutes.js";
 import vehicleRoutes from "./routes/vehicleRoutes.js";
 import driverServiceRoutes from "./routes/driverServiceRoutes.js";
 
+// ✅ BFF ROUTE (NEW)
+import ledgerBffRoutes from "./routes/bff/ledgerBffRoutes.js";
+
 dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 
-// ✅ Socket Setup for Production (Allows All Origins)
+// ✅ Socket Setup
 const io = new Server(server, {
   cors: {
     origin: "*",
@@ -43,38 +46,55 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// ✅ Routes
+// =======================
+// ✅ ROUTES
+// =======================
+
+// Auth & Core
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/branches", branchRoutes);
+
+// Driver
 app.use("/api/drivers", driverRoutes);
 app.use("/api/driver-location", driverLocationRoutes);
 app.use("/api/driver-duty", driverDutyRoutes);
-app.use("/api/manager", managerRoutes);
-app.use("/api/manager", managerTripsheetRoutes);
-app.use("/api/salary-schemes", salarySchemeRoutes);
-app.use("/api/driver-salary", assignSalaryRoutes);
-app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/driver-service", driverServiceRoutes);
 
-// ✅ Base Route
+// Manager
+app.use("/api/manager", managerRoutes);
+app.use("/api/manager", managerTripsheetRoutes);
+
+// Salary / Ledger (Internal APIs)
+app.use("/api/salary-schemes", salarySchemeRoutes);
+app.use("/api/driver-salary", assignSalaryRoutes);
+
+// Vehicles
+app.use("/api/vehicles", vehicleRoutes);
+
+// ✅ BFF (FRONTEND SHOULD USE ONLY THIS FOR LEDGER)
+app.use("/api/bff", ledgerBffRoutes);
+
+// =======================
+// ✅ BASE ROUTE
+// =======================
 app.get("/", (req, res) => {
   res.send("✅ Backend API is Live and Running!");
 });
 
-// ✅ MongoDB Connection
+// =======================
+// ✅ DATABASE
+// =======================
 mongoose
-  .connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Connected Successfully"))
   .catch((err) => console.error("❌ MongoDB Connection Error:", err));
 
-// ✅ Attach socket to app instance
+// =======================
+// ✅ SOCKET.IO
+// =======================
 app.set("io", io);
 
-// ✅ Socket Events
 io.on("connection", (socket) => {
   console.log("⚡ User Connected:", socket.id);
 
@@ -90,11 +110,15 @@ io.on("connection", (socket) => {
   });
 
   socket.on("driverOnDuty", (data) => {
-    if (data?.branchId) io.to(String(data.branchId)).emit("driverOnDuty", data);
+    if (data?.branchId) {
+      io.to(String(data.branchId)).emit("driverOnDuty", data);
+    }
   });
 
   socket.on("tripCompleted", (data) => {
-    if (data?.branchId) io.to(String(data.branchId)).emit("tripCompleted", data);
+    if (data?.branchId) {
+      io.to(String(data.branchId)).emit("tripCompleted", data);
+    }
   });
 
   socket.on("disconnect", () => {
@@ -102,7 +126,10 @@ io.on("connection", (socket) => {
   });
 });
 
-// ✅ Start Server
+// =======================
+// ✅ START SERVER
+// =======================
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`🌍 Server Running on Port ${PORT}`));
-
+server.listen(PORT, () =>
+  console.log(`🌍 Server Running on Port ${PORT}`)
+);
