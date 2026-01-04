@@ -6,17 +6,24 @@ import Driver from "../models/Driver.js";
 
 const router = express.Router();
 
+/* ============================= */
 /* 🔐 PASSWORD LOGIN */
+/* ============================= */
 router.post("/login", async (req, res) => {
   try {
     let { mobile, password } = req.body;
+
+    if (!mobile || !password) {
+      return res.status(400).json({ message: "Mobile and password required" });
+    }
+
     mobile = mobile.replace(/\D/g, "").slice(-10);
 
-    let user = await User.findOne({ mobile });
+    let user = await User.findOne({ mobile }).populate("branch", "name");
     let role = "user";
 
     if (!user) {
-      user = await Driver.findOne({ mobile });
+      user = await Driver.findOne({ mobile }).populate("branch", "name");
       role = "driver";
     }
 
@@ -34,28 +41,39 @@ router.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user._id, role: role === "driver" ? "driver" : user.role },
+      {
+        id: user._id,
+        role: role === "driver" ? "driver" : user.role,
+      },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
     res.json({ token, user });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-/* 📲 OTP LOGIN (THIS WAS MISSING / WRONG PLACE BEFORE) */
+/* ============================= */
+/* 📲 OTP LOGIN (IMPORTANT) */
+/* ============================= */
 router.post("/otp-login", async (req, res) => {
   try {
     let { mobile } = req.body;
+
+    if (!mobile) {
+      return res.status(400).json({ message: "Mobile required" });
+    }
+
     mobile = mobile.replace(/\D/g, "").slice(-10);
 
-    let user = await User.findOne({ mobile });
+    let user = await User.findOne({ mobile }).populate("branch", "name");
     let role = "user";
 
     if (!user) {
-      user = await Driver.findOne({ mobile });
+      user = await Driver.findOne({ mobile }).populate("branch", "name");
       role = "driver";
     }
 
@@ -68,13 +86,17 @@ router.post("/otp-login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user._id, role: role === "driver" ? "driver" : user.role },
+      {
+        id: user._id,
+        role: role === "driver" ? "driver" : user.role,
+      },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
     res.json({ token, user });
   } catch (err) {
+    console.error("OTP login error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
