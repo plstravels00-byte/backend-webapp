@@ -11,10 +11,16 @@ const router = express.Router();
 /* ========================================================================= */
 router.post("/login", async (req, res) => {
   try {
-    const { mobile, password } = req.body;
+    let { mobile, password } = req.body;
+
     if (!mobile || !password) {
-      return res.status(400).json({ message: "Mobile and password required" });
+      return res
+        .status(400)
+        .json({ message: "Mobile and password required" });
     }
+
+    // ✅ normalize mobile
+    mobile = mobile.replace(/\D/g, "").slice(-10);
 
     let user = await User.findOne({ mobile }).populate("branch", "name");
     let role = "user";
@@ -25,7 +31,7 @@ router.post("/login", async (req, res) => {
     }
 
     if (!user) {
-      return res.status(400).json({ message: "User not found" });
+      return res.status(404).json({ message: "User not found" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -34,7 +40,9 @@ router.post("/login", async (req, res) => {
     }
 
     if (role === "driver" && user.isApproved === false) {
-      return res.status(403).json({ message: "Your account is pending approval." });
+      return res
+        .status(403)
+        .json({ message: "Your account is pending approval." });
     }
 
     const token = jwt.sign(
@@ -67,15 +75,18 @@ router.post("/login", async (req, res) => {
 });
 
 /* ========================================================================= */
-/* 📲 OTP LOGIN (NEW – PASSWORDLESS) */
+/* 📲 OTP LOGIN (PASSWORDLESS – FINAL FIXED VERSION) */
 /* ========================================================================= */
 router.post("/otp-login", async (req, res) => {
   try {
-    const { mobile } = req.body;
+    let { mobile } = req.body;
 
     if (!mobile) {
       return res.status(400).json({ message: "Mobile number required" });
     }
+
+    // ✅ CRITICAL FIX: normalize mobile (always 10 digits)
+    mobile = mobile.replace(/\D/g, "").slice(-10);
 
     let user = await User.findOne({ mobile }).populate("branch", "name");
     let role = "user";
@@ -85,12 +96,19 @@ router.post("/otp-login", async (req, res) => {
       role = "driver";
     }
 
+    // ❗ user not registered
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({
+        message: "User not registered",
+        action: "REGISTER",
+      });
     }
 
+    // ❗ driver approval check
     if (role === "driver" && user.isApproved === false) {
-      return res.status(403).json({ message: "Your account is pending approval." });
+      return res.status(403).json({
+        message: "Your account is pending approval.",
+      });
     }
 
     const token = jwt.sign(
