@@ -1,13 +1,20 @@
+# Node base image
 FROM node:20-alpine
 
+# App directory
 WORKDIR /app
 
+# Copy package files
 COPY package*.json ./
-RUN npm install
 
+# Install dependencies
+RUN npm install --production
+
+# Copy source code
 COPY . .
 
-ENV PORT=8080
+# Cloud Run uses PORT env
 EXPOSE 8080
 
-CMD ["npm", "start"]
+# Start server
+CMD ["node", "index.js"]
