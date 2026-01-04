@@ -6,15 +6,10 @@ import Driver from "../models/Driver.js";
 
 const router = express.Router();
 
-/* ================= PASSWORD LOGIN ================= */
+/* 🔐 PASSWORD LOGIN */
 router.post("/login", async (req, res) => {
   try {
     let { mobile, password } = req.body;
-
-    if (!mobile || !password) {
-      return res.status(400).json({ message: "Mobile and password required" });
-    }
-
     mobile = mobile.replace(/\D/g, "").slice(-10);
 
     let user = await User.findOne({ mobile });
@@ -35,7 +30,7 @@ router.post("/login", async (req, res) => {
     }
 
     if (role === "driver" && user.isApproved === false) {
-      return res.status(403).json({ message: "Account pending approval" });
+      return res.status(403).json({ message: "Pending approval" });
     }
 
     const token = jwt.sign(
@@ -50,15 +45,10 @@ router.post("/login", async (req, res) => {
   }
 });
 
-/* ================= OTP LOGIN ================= */
+/* 📲 OTP LOGIN (THIS WAS MISSING / WRONG PLACE BEFORE) */
 router.post("/otp-login", async (req, res) => {
   try {
     let { mobile } = req.body;
-
-    if (!mobile) {
-      return res.status(400).json({ message: "Mobile required" });
-    }
-
     mobile = mobile.replace(/\D/g, "").slice(-10);
 
     let user = await User.findOne({ mobile });
@@ -74,7 +64,7 @@ router.post("/otp-login", async (req, res) => {
     }
 
     if (role === "driver" && user.isApproved === false) {
-      return res.status(403).json({ message: "Account pending approval" });
+      return res.status(403).json({ message: "Pending approval" });
     }
 
     const token = jwt.sign(
