@@ -6,9 +6,16 @@ import Driver from "../models/Driver.js";
 
 const router = express.Router();
 
-/* ============================= */
+/* ========================================================= */
+/* 🔍 TEST ROUTE – MUST WORK (DEBUG PURPOSE) */
+/* ========================================================= */
+router.get("/test", (req, res) => {
+  res.json({ ok: true, message: "AUTH ROUTES WORKING" });
+});
+
+/* ========================================================= */
 /* 🔐 PASSWORD LOGIN */
-/* ============================= */
+/* ========================================================= */
 router.post("/login", async (req, res) => {
   try {
     let { mobile, password } = req.body;
@@ -17,13 +24,14 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Mobile and password required" });
     }
 
+    // normalize mobile
     mobile = mobile.replace(/\D/g, "").slice(-10);
 
-    let user = await User.findOne({ mobile }).populate("branch", "name");
+    let user = await User.findOne({ mobile });
     let role = "user";
 
     if (!user) {
-      user = await Driver.findOne({ mobile }).populate("branch", "name");
+      user = await Driver.findOne({ mobile });
       role = "driver";
     }
 
@@ -37,7 +45,7 @@ router.post("/login", async (req, res) => {
     }
 
     if (role === "driver" && user.isApproved === false) {
-      return res.status(403).json({ message: "Pending approval" });
+      return res.status(403).json({ message: "Driver pending approval" });
     }
 
     const token = jwt.sign(
@@ -49,40 +57,55 @@ router.post("/login", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.json({ token, user });
+    res.json({
+      message: "Login successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        mobile: user.mobile,
+        role: role === "driver" ? "driver" : user.role,
+      },
+    });
   } catch (err) {
-    console.error(err);
+    console.error("Password login error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-/* ============================= */
-/* 📲 OTP LOGIN (IMPORTANT) */
-/* ============================= */
+/* ========================================================= */
+/* 📲 OTP LOGIN (NO PASSWORD – FINAL) */
+/* ========================================================= */
 router.post("/otp-login", async (req, res) => {
   try {
     let { mobile } = req.body;
 
     if (!mobile) {
-      return res.status(400).json({ message: "Mobile required" });
+      return res.status(400).json({ message: "Mobile number required" });
     }
 
+    // normalize mobile
     mobile = mobile.replace(/\D/g, "").slice(-10);
 
-    let user = await User.findOne({ mobile }).populate("branch", "name");
+    let user = await User.findOne({ mobile });
     let role = "user";
 
     if (!user) {
-      user = await Driver.findOne({ mobile }).populate("branch", "name");
+      user = await Driver.findOne({ mobile });
       role = "driver";
     }
 
     if (!user) {
-      return res.status(404).json({ message: "User not registered" });
+      return res.status(404).json({
+        message: "User not registered",
+        action: "REGISTER",
+      });
     }
 
     if (role === "driver" && user.isApproved === false) {
-      return res.status(403).json({ message: "Pending approval" });
+      return res.status(403).json({
+        message: "Driver pending approval",
+      });
     }
 
     const token = jwt.sign(
@@ -94,7 +117,16 @@ router.post("/otp-login", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.json({ token, user });
+    res.json({
+      message: "OTP login successful",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        mobile: user.mobile,
+        role: role === "driver" ? "driver" : user.role,
+      },
+    });
   } catch (err) {
     console.error("OTP login error:", err);
     res.status(500).json({ message: "Server error" });
